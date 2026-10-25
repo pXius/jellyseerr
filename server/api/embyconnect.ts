@@ -14,7 +14,7 @@ export interface ConnectAuthResponse {
     Id: string;
     Name: string;
     Email: string;
-    IsActive: string;
+    IsActive: string | boolean;
   };
 }
 
@@ -87,10 +87,12 @@ class EmbyConnectAPI extends ExternalAPI {
       this.DeviceId
     );
 
+    const isActive = String(connectAuthResponse.User.IsActive) === 'true';
+
     return {
       User: {
         Name: connectAuthResponse.User.Name,
-        Email: connectAuthResponse.User.Email,
+        Email: isActive ? connectAuthResponse.User.Email : undefined,
         ServerId: matchingServer.SystemId,
         ServerName: matchingServer.Name,
         Id: localUserExchangeResponse.LocalUserId,
