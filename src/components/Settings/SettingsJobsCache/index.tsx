@@ -8,6 +8,7 @@ import Table from '@app/components/Common/Table';
 import useLocale from '@app/hooks/useLocale';
 import useSettings from '@app/hooks/useSettings';
 
+import useToasts from '@app/hooks/useToasts';
 import globalMessages from '@app/i18n/globalMessages';
 import defineMessages from '@app/utils/defineMessages';
 import { formatBytes } from '@app/utils/numberHelpers';
@@ -22,11 +23,10 @@ import type {
 import type { JobId } from '@server/lib/settings';
 import axios from 'axios';
 import cronstrue from 'cronstrue/i18n';
-import { formatDuration, intervalToDuration } from 'date-fns';
+import humanizeDuration from 'humanize-duration';
 import { Fragment, useReducer, useState } from 'react';
 import type { MessageDescriptor } from 'react-intl';
 import { FormattedRelativeTime, useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import useSWR from 'swr';
 
 const messages: { [messageName: string]: MessageDescriptor } = defineMessages(
@@ -308,7 +308,7 @@ const SettingsJobs = () => {
 
       dispatch({ type: 'close' });
       revalidate();
-    } catch (e) {
+    } catch {
       addToast(intl.formatMessage(messages.jobScheduleEditFailed), {
         appearance: 'error',
         autoDismiss: true,
@@ -319,14 +319,10 @@ const SettingsJobs = () => {
   };
 
   const formatAge = (milliseconds: number): string => {
-    const duration = intervalToDuration({
-      start: 0,
-      end: milliseconds,
-    });
-
-    return formatDuration(duration, {
-      format: ['minutes', 'seconds'],
-      zero: false,
+    return humanizeDuration(milliseconds, {
+      units: ['m', 's'],
+      round: true,
+      language: locale,
     });
   };
 
@@ -417,7 +413,7 @@ const SettingsJobs = () => {
                         })
                       }
                     >
-                      {[5, 10, 15, 20, 30, 60].map((v) => (
+                      {[3, 5, 10, 15, 20, 30, 60].map((v) => (
                         <option value={v} key={`jobScheduleMinutes-${v}`}>
                           {intl.formatMessage(
                             messages.editJobScheduleSelectorMinutes,
@@ -495,7 +491,7 @@ const SettingsJobs = () => {
               <Table.TH>{intl.formatMessage(messages.jobname)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.jobtype)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.nextexecution)}</Table.TH>
-              <Table.TH></Table.TH>
+              <Table.TH />
             </tr>
           </thead>
           <Table.TBody>
@@ -578,37 +574,26 @@ const SettingsJobs = () => {
               <Table.TH>{intl.formatMessage(messages.cachekeys)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.cacheksize)}</Table.TH>
               <Table.TH>{intl.formatMessage(messages.cachevsize)}</Table.TH>
-              <Table.TH></Table.TH>
+              <Table.TH />
             </tr>
           </thead>
           <Table.TBody>
-            {cacheData?.apiCaches
-              ?.filter(
-                (cache) =>
-                  !(
-                    settings.currentSettings.mediaServerType !==
-                      MediaServerType.PLEX && cache.id === 'plexguid'
-                  )
-              )
-              .map((cache) => (
-                <tr key={`cache-list-${cache.id}`}>
-                  <Table.TD>{cache.name}</Table.TD>
-                  <Table.TD>{intl.formatNumber(cache.stats.hits)}</Table.TD>
-                  <Table.TD>{intl.formatNumber(cache.stats.misses)}</Table.TD>
-                  <Table.TD>{intl.formatNumber(cache.stats.keys)}</Table.TD>
-                  <Table.TD>{formatBytes(cache.stats.ksize)}</Table.TD>
-                  <Table.TD>{formatBytes(cache.stats.vsize)}</Table.TD>
-                  <Table.TD alignText="right">
-                    <Button
-                      buttonType="danger"
-                      onClick={() => flushCache(cache)}
-                    >
-                      <TrashIcon />
-                      <span>{intl.formatMessage(messages.flushcache)}</span>
-                    </Button>
-                  </Table.TD>
-                </tr>
-              ))}
+            {cacheData?.apiCaches?.map((cache) => (
+              <tr key={`cache-list-${cache.id}`}>
+                <Table.TD>{cache.name}</Table.TD>
+                <Table.TD>{intl.formatNumber(cache.stats.hits)}</Table.TD>
+                <Table.TD>{intl.formatNumber(cache.stats.misses)}</Table.TD>
+                <Table.TD>{intl.formatNumber(cache.stats.keys)}</Table.TD>
+                <Table.TD>{formatBytes(cache.stats.ksize)}</Table.TD>
+                <Table.TD>{formatBytes(cache.stats.vsize)}</Table.TD>
+                <Table.TD alignText="right">
+                  <Button buttonType="danger" onClick={() => flushCache(cache)}>
+                    <TrashIcon />
+                    <span>{intl.formatMessage(messages.flushcache)}</span>
+                  </Button>
+                </Table.TD>
+              </tr>
+            ))}
           </Table.TBody>
         </Table>
       </div>
@@ -639,7 +624,7 @@ const SettingsJobs = () => {
                   <Table.TH>
                     {intl.formatMessage(messages.dnscacheage)}
                   </Table.TH>
-                  <Table.TH></Table.TH>
+                  <Table.TH />
                 </tr>
               </thead>
               <Table.TBody>
@@ -744,7 +729,9 @@ const SettingsJobs = () => {
         <p className="description">
           {intl.formatMessage(messages.imagecacheDescription, {
             code: (msg: React.ReactNode) => (
-              <code className="bg-opacity-50">{msg}</code>
+              <code key="code-block" className="bg-gray-800/50">
+                {msg}
+              </code>
             ),
             appDataPath: appData ? appData.appDataPath : '/app/config',
           })}

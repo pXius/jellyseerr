@@ -1,4 +1,5 @@
 import logger from '@server/logger';
+import type { AxiosResponse } from 'axios';
 import ServarrBase from './base';
 
 export interface RadarrMovieOptions {
@@ -64,16 +65,8 @@ export interface RadarrMovie {
 }
 
 class RadarrAPI extends ServarrBase<{ movieId: number }> {
-  constructor({
-    url,
-    apiKey,
-    timeout,
-  }: {
-    url: string;
-    apiKey: string;
-    timeout?: number;
-  }) {
-    super({ url, apiKey, cacheName: 'radarr', apiName: 'Radarr', timeout });
+  constructor({ url, apiKey }: { url: string; apiKey: string }) {
+    super({ url, apiKey, cacheName: 'radarr', apiName: 'Radarr' });
   }
 
   public getMovies = async (): Promise<RadarrMovie[]> => {
@@ -82,7 +75,26 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
 
       return response.data;
     } catch (e) {
-      throw new Error(`[Radarr] Failed to retrieve movies: ${e.message}`);
+      throw new Error(`[Radarr] Failed to retrieve movies: ${e.message}`, {
+        cause: e,
+      });
+    }
+  };
+
+  public getLibraryMoviesByTmdbId = async (
+    tmdbId: number
+  ): Promise<RadarrMovie[]> => {
+    try {
+      const response = await this.axios.get<RadarrMovie[]>('/movie', {
+        params: { tmdbId },
+      });
+
+      return response.data;
+    } catch (e) {
+      throw new Error(
+        `[Radarr] Failed to retrieve movies by TMDB ID: ${e.message}`,
+        { cause: e }
+      );
     }
   };
 
@@ -92,31 +104,34 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
 
       return response.data;
     } catch (e) {
-      throw new Error(`[Radarr] Failed to retrieve movie: ${e.message}`);
+      throw new Error(`[Radarr] Failed to retrieve movie: ${e.message}`, {
+        cause: e,
+      });
     }
   };
 
   public async getMovieByTmdbId(id: number): Promise<RadarrMovie> {
+    let response: AxiosResponse<RadarrMovie[]>;
     try {
-      const response = await this.axios.get<RadarrMovie[]>('/movie/lookup', {
+      response = await this.axios.get<RadarrMovie[]>('/movie/lookup', {
         params: {
           term: `tmdb:${id}`,
         },
       });
-
-      if (!response.data[0]) {
-        throw new Error('Movie not found');
-      }
-
-      return response.data[0];
     } catch (e) {
       logger.error('Error retrieving movie by TMDB ID', {
         label: 'Radarr API',
         errorMessage: e.message,
         tmdbId: id,
       });
+      throw e;
+    }
+
+    if (!response.data[0]) {
       throw new Error('Movie not found');
     }
+
+    return response.data[0];
   }
 
   public addMovie = async (
@@ -169,7 +184,12 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
             movie: response.data,
           });
 
-          if (options.searchNow) {
+          if (options.searchNow && response.data.isAvailable) {
+            logger.info('Movie is available, triggering Radarr search.', {
+              label: 'Radarr',
+              movieId: response.data.id,
+              movieTitle: response.data.title,
+            });
             this.searchMovie(response.data.id);
           }
 
@@ -184,10 +204,27 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       }
 
       if (movie.id) {
-        logger.info(
-          'Movie is already monitored in Radarr. Skipping add and returning success',
-          { label: 'Radarr' }
-        );
+        // Movie exists and is already monitored
+        logger.info('Movie is already monitored in Radarr.', {
+          label: 'Radarr',
+          movieId: movie.id,
+          movieTitle: movie.title,
+          hasFile: movie.hasFile,
+        });
+
+        // If searchNow is requested, movie doesn't have a file, and Radarr considers the movie 'available' then trigger search
+        if (options.searchNow && !movie.hasFile && movie.isAvailable) {
+          logger.info(
+            'Triggering search for existing, available, monitored movie without file',
+            {
+              label: 'Radarr',
+              movieId: movie.id,
+              movieTitle: movie.title,
+            }
+          );
+          this.searchMovie(movie.id);
+        }
+
         return movie;
       }
 
@@ -231,7 +268,7 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
           response: e?.response?.data,
         }
       );
-      throw new Error('Failed to add movie to Radarr');
+      throw new Error('Failed to add movie to Radarr', { cause: e });
     }
   };
 
@@ -254,9 +291,17 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       );
     }
   }
-  public removeMovie = async (movieId: number): Promise<void> => {
+  public removeMovie = async (tmdbId: number): Promise<void> => {
+    const { id, title } = await this.getMovieByTmdbId(tmdbId);
+
+    if (!id) {
+      logger.info(`[Radarr] Movie not in library, nothing to remove`, {
+        tmdbId,
+      });
+      return;
+    }
+
     try {
-      const { id, title } = await this.getMovieByTmdbId(movieId);
       await this.axios.delete(`/movie/${id}`, {
         params: {
           deleteFiles: true,
@@ -265,7 +310,13 @@ class RadarrAPI extends ServarrBase<{ movieId: number }> {
       });
       logger.info(`[Radarr] Removed movie ${title}`);
     } catch (e) {
-      throw new Error(`[Radarr] Failed to remove movie: ${e.message}`);
+      if (e?.response?.status === 404) {
+        logger.info(`[Radarr] Movie already removed from Radarr`, {
+          tmdbId,
+        });
+        return;
+      }
+      throw e;
     }
   };
 

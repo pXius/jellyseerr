@@ -1,14 +1,20 @@
 import Button from '@app/components/Common/Button';
 import SensitiveInput from '@app/components/Common/SensitiveInput';
+import JellyfinQuickConnectModal from '@app/components/Login/JellyfinQuickConnectModal';
 import useSettings from '@app/hooks/useSettings';
+import useToasts from '@app/hooks/useToasts';
 import defineMessages from '@app/utils/defineMessages';
-import { ArrowLeftOnRectangleIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowLeftOnRectangleIcon,
+  QrCodeIcon,
+} from '@heroicons/react/24/outline';
+import { ExclamationTriangleIcon } from '@heroicons/react/24/solid';
 import { ApiErrorCode } from '@server/constants/error';
 import { MediaServerType, ServerType } from '@server/constants/server';
 import axios from 'axios';
 import { Field, Form, Formik } from 'formik';
+import { useCallback, useState } from 'react';
 import { useIntl } from 'react-intl';
-import { useToasts } from 'react-toast-notifications';
 import * as Yup from 'yup';
 
 const messages = defineMessages('components.Login', {
@@ -23,9 +29,12 @@ const messages = defineMessages('components.Login', {
   noadminerror: 'No admin user found on the server.',
   credentialerror: 'The username or password is incorrect.',
   invalidurlerror: 'Unable to connect to {mediaServerName} server.',
+  tipUsernameHasTrailingWhitespace: 'The username ends with whitespace',
   signingin: 'Signing In…',
   signin: 'Sign In',
   forgotpassword: 'Forgot Password?',
+  quickconnect: 'Quick Connect',
+  quickconnecterror: 'Quick Connect failed. Please try again.',
 });
 
 interface JellyfinLoginProps {
@@ -33,13 +42,11 @@ interface JellyfinLoginProps {
   serverType?: MediaServerType;
 }
 
-const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
-  revalidate,
-  serverType,
-}) => {
+const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
   const toasts = useToasts();
   const intl = useIntl();
   const settings = useSettings();
+  const [showQuickConnect, setShowQuickConnect] = useState(false);
 
   const mediaServerFormatValues = {
     mediaServerName:
@@ -49,6 +56,16 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
           ? ServerType.EMBY
           : 'Media Server',
   };
+
+  const handleQuickConnectError = useCallback(
+    (error: string) => {
+      toasts.addToast(error, {
+        autoDismiss: true,
+        appearance: 'error',
+      });
+    },
+    [toasts]
+  );
 
   const LoginSchema = Yup.object().shape({
     username: Yup.string().required(
@@ -79,9 +96,10 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
               email: values.username,
             });
           } catch (e) {
-            let errorMessage = null;
+            let errorMessage = messages.loginerror;
             switch (e?.response?.data?.message) {
               case ApiErrorCode.InvalidUrl:
+              case ApiErrorCode.ConnectionError:
                 errorMessage = messages.invalidurlerror;
                 break;
               case ApiErrorCode.InvalidCredentials:
@@ -92,9 +110,6 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
                 break;
               case ApiErrorCode.NoAdminUser:
                 errorMessage = messages.noadminerror;
-                break;
-              default:
-                errorMessage = messages.loginerror;
                 break;
             }
             toasts.addToast(
@@ -109,7 +124,7 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
           }
         }}
       >
-        {({ errors, touched, isSubmitting, isValid }) => {
+        {({ errors, touched, values, isSubmitting, isValid }) => {
           return (
             <>
               <Form data-form-type="login">
@@ -133,6 +148,14 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
                         data-form-type="username"
                       />
                     </div>
+                    {touched.username && values.username.match(/\s$/) && (
+                      <div className="warning label-tip flex items-center">
+                        <ExclamationTriangleIcon className="mr-1 h-4 w-4" />
+                        {intl.formatMessage(
+                          messages.tipUsernameHasTrailingWhitespace
+                        )}
+                      </div>
+                    )}
                     {errors.username && touched.username && (
                       <div className="error">{errors.username}</div>
                     )}
@@ -157,7 +180,7 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
                       {errors.password && touched.password && (
                         <div className="error">{errors.password}</div>
                       )}
-                      <div className="flex-grow"></div>
+                      <div className="flex-grow" />
                       {baseUrl && (
                         <a
                           href={
@@ -197,6 +220,32 @@ const JellyfinLogin: React.FC<JellyfinLoginProps> = ({
           );
         }}
       </Formik>
+
+      {serverType === MediaServerType.JELLYFIN && (
+        <div className="mt-4">
+          <Button
+            buttonType="ghost"
+            type="button"
+            onClick={() => setShowQuickConnect(true)}
+            className="w-full"
+          >
+            <QrCodeIcon />
+            <span>{intl.formatMessage(messages.quickconnect)}</span>
+          </Button>
+        </div>
+      )}
+
+      {showQuickConnect && (
+        <JellyfinQuickConnectModal
+          onClose={() => setShowQuickConnect(false)}
+          onAuthenticated={() => {
+            setShowQuickConnect(false);
+            revalidate();
+          }}
+          onError={handleQuickConnectError}
+          mediaServerName={mediaServerFormatValues.mediaServerName}
+        />
+      )}
     </div>
   );
 };
