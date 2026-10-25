@@ -503,7 +503,7 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
         await userRepository.save(user);
       } else {
         logger.info(
-          'Sign-in attempt from Jellyfin/Emby user with access to the media server; creating new Jellyseerr user',
+          'Sign-in attempt from Jellyfin/Emby user with access to the media server; creating new Seerr user',
           {
             label: 'API',
             ip: req.ip,

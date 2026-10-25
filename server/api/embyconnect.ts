@@ -52,7 +52,7 @@ class EmbyConnectAPI extends ExternalAPI {
       {},
       {
         headers: {
-          'X-Application': `Jellyseerr/${getAppVersion()}`,
+          'X-Application': `Seerr/${getAppVersion()}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
           ...(getSettings().main.mediaServerType === MediaServerType.EMBY &&
@@ -180,10 +180,10 @@ class EmbyConnectAPI extends ExternalAPI {
       const params = new URLSearchParams({
         format: 'json',
         ConnectUserId: userId,
-        'X-Emby-Client': 'Jellyseerr',
+        'X-Emby-Client': 'Seerr',
         'X-Emby-Device-Id': deviceId ?? uniqueId(),
         'X-Emby-Client-Version': getAppVersion(),
-        'X-Emby-Device-Name': 'Jellyseerr',
+        'X-Emby-Device-Name': 'Seerr',
         'X-Emby-Token': accessKey,
       });
 
