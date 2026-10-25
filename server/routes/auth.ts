@@ -331,6 +331,50 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
       where: { jellyfinUserId: account.User.Id },
     });
 
+    const embyEmail = account.User.Email?.trim().toLowerCase();
+    if (
+      !user &&
+      settings.main.mediaServerType === MediaServerType.EMBY &&
+      embyEmail
+    ) {
+      const emailUser = await userRepository.findOne({
+        where: { email: embyEmail },
+      });
+
+      if (emailUser?.jellyfinUserId) {
+        logger.warn(
+          'Failed Emby Connect sign-in: email belongs to a Seerr user linked to another Emby account',
+          {
+            label: 'API',
+            ip: req.ip,
+            userId: emailUser.id,
+            jellyfinUserId: account.User.Id,
+            jellyfinUsername: account.User.Name,
+          }
+        );
+        return next({
+          status: 409,
+          message: 'This email is already linked to another account.',
+        });
+      }
+
+      if (emailUser) {
+        logger.info(
+          'Found matching Seerr user by Emby Connect email; linking Emby account',
+          {
+            label: 'API',
+            ip: req.ip,
+            userId: emailUser.id,
+            jellyfinUserId: account.User.Id,
+            jellyfinUsername: account.User.Name,
+          }
+        );
+        emailUser.jellyfinUserId = account.User.Id;
+        emailUser.jellyfinDeviceId = deviceId;
+        user = emailUser;
+      }
+    }
+
     const missingAdminUser = !user && !(await userRepository.count());
     if (
       missingAdminUser ||
@@ -454,7 +498,6 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
       user.avatar = getUserAvatarUrl(user);
       user.jellyfinUsername = account.User.Name;
 
-      const embyEmail = account.User.Email?.trim().toLowerCase();
       if (embyEmail && user.email !== embyEmail) {
         user.email = embyEmail;
       }
@@ -479,54 +522,34 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
         message: 'Access denied.',
       });
     } else if (!user) {
-      // Handle Emby Connect user with unlinked local account
-      const embyEmail = account.User.Email?.trim().toLowerCase();
-      if (settings.main.mediaServerType === MediaServerType.EMBY && embyEmail) {
-        user = await userRepository.findOne({
-          where: { email: embyEmail },
-        });
-      }
-
-      if (user) {
-        logger.info(
-          'Sign in attempt from EmbyConnect user with access to the media server, linking users'
-        );
-        user.avatar = getUserAvatarUrl(user);
-        user.jellyfinUserId = account.User.Id;
-        user.userType = UserType.EMBY;
-        user.username = account.User.Name;
-        await userRepository.save(user);
-      } else {
-        logger.info(
-          'Sign-in attempt from Jellyfin/Emby user with access to the media server; creating new Seerr user',
-          {
-            label: 'API',
-            ip: req.ip,
-            jellyfinUsername: account.User.Name,
-          }
-        );
-
-        user = new User({
-          email: embyEmail || body.email,
+      logger.info(
+        'Sign-in attempt from Jellyfin/Emby user with access to the media server; creating new Seerr user',
+        {
+          label: 'API',
+          ip: req.ip,
           jellyfinUsername: account.User.Name,
-          jellyfinUserId: account.User.Id,
-          jellyfinDeviceId: deviceId,
-          permissions: settings.main.defaultPermissions,
-          userType:
-            settings.main.mediaServerType === MediaServerType.JELLYFIN
-              ? UserType.JELLYFIN
-              : UserType.EMBY,
-        });
-        user.avatar = getUserAvatarUrl(user);
-
-        //initialize Jellyfin/Emby users with local login
-        const passedExplicitPassword =
-          body.password && body.password.length > 0;
-        if (passedExplicitPassword) {
-          await user.setPassword(body.password ?? '');
         }
-        await userRepository.save(user);
+      );
+
+      user = new User({
+        email: embyEmail || body.email,
+        jellyfinUsername: account.User.Name,
+        jellyfinUserId: account.User.Id,
+        jellyfinDeviceId: deviceId,
+        permissions: settings.main.defaultPermissions,
+        userType:
+          settings.main.mediaServerType === MediaServerType.JELLYFIN
+            ? UserType.JELLYFIN
+            : UserType.EMBY,
+      });
+      user.avatar = getUserAvatarUrl(user);
+
+      //initialize Jellyfin/Emby users with local login
+      const passedExplicitPassword = body.password && body.password.length > 0;
+      if (passedExplicitPassword) {
+        await user.setPassword(body.password ?? '');
       }
+      await userRepository.save(user);
     }
 
     if (user && user.jellyfinUserId) {
