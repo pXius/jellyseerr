@@ -1,12 +1,11 @@
 import ExternalAPI from '@server/api/externalapi';
 import { ApiErrorCode } from '@server/constants/error';
-import { MediaServerType } from '@server/constants/server';
 import { getSettings } from '@server/lib/settings';
 import logger from '@server/logger';
 import { ApiError } from '@server/types/error';
 import { getAppVersion } from '@server/utils/appVersion';
 import { getHostname } from '@server/utils/getHostname';
-import { uniqueId } from 'lodash';
+import { randomUUID } from 'crypto';
 import type { JellyfinLoginResponse } from './jellyfin';
 
 export interface ConnectAuthResponse {
@@ -55,8 +54,6 @@ class EmbyConnectAPI extends ExternalAPI {
           'X-Application': `Seerr/${getAppVersion()}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
-          ...(getSettings().main.mediaServerType === MediaServerType.EMBY &&
-            {}),
         },
       }
     );
@@ -65,8 +62,9 @@ class EmbyConnectAPI extends ExternalAPI {
   }
 
   public async authenticateConnectUser(Email?: string, Password?: string) {
-    logger.debug(`Attempting to authenticate via EmbyConnect with email:`, {
-      Email,
+    logger.debug('Attempting to authenticate via EmbyConnect', {
+      label: 'EmbyConnect API',
+      ip: this.ClientIP,
     });
 
     const connectAuthResponse = await this.getConnectUserAccessToken(
@@ -98,7 +96,7 @@ class EmbyConnectAPI extends ExternalAPI {
           GroupedFolders: [],
         },
         Policy: {
-          IsAdministrator: false, // This requires an additional EmbyServer API call, skipping for now
+          IsAdministrator: false, // Not returned by Emby Connect; only checked during setup, where Connect isn't used
         },
       },
       AccessToken: localUserExchangeResponse.AccessToken,
@@ -181,7 +179,7 @@ class EmbyConnectAPI extends ExternalAPI {
         format: 'json',
         ConnectUserId: userId,
         'X-Emby-Client': 'Seerr',
-        'X-Emby-Device-Id': deviceId ?? uniqueId(),
+        'X-Emby-Device-Id': deviceId ?? randomUUID(),
         'X-Emby-Client-Version': getAppVersion(),
         'X-Emby-Device-Name': 'Seerr',
         'X-Emby-Token': accessKey,

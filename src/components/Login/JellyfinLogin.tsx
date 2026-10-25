@@ -141,9 +141,14 @@ const JellyfinLogin = ({ revalidate, serverType }: JellyfinLoginProps) => {
                         id="username"
                         name="username"
                         type="text"
-                        placeholder={`${intl.formatMessage(
-                          messages.email
-                        )} / ${intl.formatMessage(messages.username)}`}
+                        placeholder={
+                          settings.currentSettings.mediaServerType ===
+                          MediaServerType.EMBY
+                            ? `${intl.formatMessage(
+                                messages.email
+                              )} / ${intl.formatMessage(messages.username)}`
+                            : intl.formatMessage(messages.username)
+                        }
                         className="!bg-gray-700/80 placeholder:text-gray-400"
                         data-form-type="username"
                       />

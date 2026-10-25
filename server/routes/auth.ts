@@ -454,11 +454,9 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
       user.avatar = getUserAvatarUrl(user);
       user.jellyfinUsername = account.User.Name;
 
-      if (
-        account.User.Email !== undefined &&
-        user.email !== account.User.Email
-      ) {
-        user.email = account.User.Email;
+      const embyEmail = account.User.Email?.trim().toLowerCase();
+      if (embyEmail && user.email !== embyEmail) {
+        user.email = embyEmail;
       }
 
       if (user.username === account.User.Name) {
@@ -482,13 +480,10 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
       });
     } else if (!user) {
       // Handle Emby Connect user with unlinked local account
-      if (
-        settings.main.mediaServerType === MediaServerType.EMBY &&
-        account.User.Email &&
-        account.User.Email.trim() !== ''
-      ) {
+      const embyEmail = account.User.Email?.trim().toLowerCase();
+      if (settings.main.mediaServerType === MediaServerType.EMBY && embyEmail) {
         user = await userRepository.findOne({
-          where: { email: account.User.Email },
+          where: { email: embyEmail },
         });
       }
 
@@ -512,7 +507,7 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
         );
 
         user = new User({
-          email: body.email,
+          email: embyEmail || body.email,
           jellyfinUsername: account.User.Name,
           jellyfinUserId: account.User.Id,
           jellyfinDeviceId: deviceId,
