@@ -203,7 +203,12 @@ class EmbyConnectAPI extends ExternalAPI {
         throw new Error(response.statusText, { cause: response });
       }
 
-      return await response.json();
+      const result: LocalUserAuthExchangeResponse = await response.json();
+      if (!result?.LocalUserId) {
+        throw new Error('Invalid Emby Connect exchange response');
+      }
+
+      return result;
     } catch (e) {
       logger.debug('Failed local user auth exchange', {
         label: 'EmbyConnect API',
