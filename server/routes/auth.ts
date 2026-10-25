@@ -371,6 +371,7 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
         );
         emailUser.jellyfinUserId = account.User.Id;
         emailUser.jellyfinDeviceId = deviceId;
+        emailUser.userType = UserType.EMBY;
         user = emailUser;
       }
     }
@@ -482,9 +483,6 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
           ? ServerType.JELLYFIN
           : ServerType.EMBY;
 
-      const userType =
-        serverType === ServerType.JELLYFIN ? UserType.JELLYFIN : UserType.EMBY;
-
       logger.info(
         `Found matching ${serverType} user; updating user with ${serverType}`,
         {
@@ -494,7 +492,6 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
         }
       );
 
-      user.userType = userType;
       user.avatar = getUserAvatarUrl(user);
       user.jellyfinUsername = account.User.Name;
 

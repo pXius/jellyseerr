@@ -40,6 +40,7 @@ export interface EmbyConnectOptions {
 }
 
 const EMBY_CONNECT_URL = 'https://connect.emby.media';
+const REQUEST_TIMEOUT = 10000;
 
 class EmbyConnectAPI extends ExternalAPI {
   private ClientIP?: string;
@@ -55,6 +56,7 @@ class EmbyConnectAPI extends ExternalAPI {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
+        timeout: REQUEST_TIMEOUT,
       }
     );
     this.ClientIP = options.ClientIP;
@@ -126,7 +128,7 @@ class EmbyConnectAPI extends ExternalAPI {
         error: e.message,
       });
       throw new ApiError(
-        e.cause?.status ?? 401,
+        e.response?.status ?? 401,
         ApiErrorCode.InvalidCredentials
       );
     }
@@ -150,7 +152,10 @@ class EmbyConnectAPI extends ExternalAPI {
         ip: this.ClientIP,
         error: e.message,
       });
-      throw new ApiError(e.cause?.status, ApiErrorCode.InvalidAuthToken);
+      throw new ApiError(
+        e.response?.status ?? 500,
+        ApiErrorCode.InvalidAuthToken
+      );
     }
   }
 
@@ -178,19 +183,17 @@ class EmbyConnectAPI extends ExternalAPI {
       const params = new URLSearchParams({
         format: 'json',
         ConnectUserId: userId,
-        'X-Emby-Client': 'Seerr',
-        'X-Emby-Device-Id': deviceId ?? randomUUID(),
-        'X-Emby-Client-Version': getAppVersion(),
-        'X-Emby-Device-Name': 'Seerr',
-        'X-Emby-Token': accessKey,
       });
 
       const response = await fetch(
         `${getHostname()}/emby/Connect/Exchange?${params}`,
         {
           headers: {
-            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Emby-Token': accessKey,
+            'X-Emby-Authorization': `MediaBrowser Client="Seerr", Device="Seerr", DeviceId="${deviceId ?? randomUUID()}", Version="1.0.0"`,
           },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT),
         }
       );
 
@@ -200,8 +203,12 @@ class EmbyConnectAPI extends ExternalAPI {
 
       return await response.json();
     } catch (e) {
-      logger.debug('Failed local user auth exchange', e.cause);
-      throw new ApiError(e.cause?.status, ApiErrorCode.InvalidAuthToken);
+      logger.debug('Failed local user auth exchange', {
+        label: 'EmbyConnect API',
+        ip: this.ClientIP,
+        error: e.message,
+      });
+      throw new ApiError(e.cause?.status ?? 500, ApiErrorCode.InvalidAuthToken);
     }
   }
 }

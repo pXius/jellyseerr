@@ -217,11 +217,10 @@ class JellyfinAPI extends ExternalAPI {
       } catch (e) {
         // Possible local Emby user with email as username
         logger.warn(
-          `Emby Connect authentication failed: ${e}, attempting local Emby server authentication`,
+          'Emby Connect authentication failed, attempting local Emby server authentication',
           {
             label: 'Jellyfin API',
-            error:
-              e.cause?.message ?? e.cause?.statusText ?? ApiErrorCode.Unknown,
+            error: e.errorCode ?? e.message,
             ip: ClientIP,
           }
         );
