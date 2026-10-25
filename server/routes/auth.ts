@@ -496,7 +496,24 @@ authRoutes.post('/jellyfin', async (req, res, next) => {
       user.jellyfinUsername = account.User.Name;
 
       if (embyEmail && user.email !== embyEmail) {
-        user.email = embyEmail;
+        const emailOwner = await userRepository.findOne({
+          where: { email: embyEmail },
+          select: { id: true },
+        });
+
+        if (!emailOwner) {
+          user.email = embyEmail;
+        } else {
+          logger.warn(
+            'Skipped email update: Emby Connect email belongs to another Seerr user',
+            {
+              label: 'API',
+              ip: req.ip,
+              userId: user.id,
+              jellyfinUsername: account.User.Name,
+            }
+          );
+        }
       }
 
       if (user.username === account.User.Name) {
